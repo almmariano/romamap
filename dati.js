@@ -1,3 +1,4 @@
+const nasoniData =
 {
   "type": "FeatureCollection",
   "generator": "overpass-turbo",
