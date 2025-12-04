@@ -2,23 +2,27 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Essencial para celular -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Er Giro dei Nasoni</title>
     
-    <!-- Estilos do Mapa (Leaflet) -->
+    <!-- Mapa (Leaflet) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Agrupamento de Marcadores (MarkerCluster) - Para não travar com 2000 pontos -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <!-- Busca (Leaflet Geosearch) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.css" />
     
-    <!-- Fonte estilo "Roma" (Google Fonts) -->
+    <!-- Fontes -->
     <link href="https://fonts.googleapis.com/css2?family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
         body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; background-color: #f4f4f4; }
         
-        /* Página de Abertura */
+        /* Intro Screen */
         #intro-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #A30000; /* Vermelho Roma */
-            color: white; display: flex; flex-direction: column;
+            background: #A30000; color: white; display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 9999;
             text-align: center; padding: 20px; box-sizing: border-box;
         }
@@ -31,124 +35,158 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
 
-        /* Mapa */
-        #map { height: 100vh; width: 100%; display: none; } /* Oculto inicialmente */
+        /* Mapa e Controles */
+        #map { height: 100vh; width: 100%; }
+        
+        /* Barra de progresso flutuante */
+        #counter-box {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 10px 20px; border-radius: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 1000;
+            font-weight: bold; color: #A30000; display: none; white-space: nowrap;
+        }
 
-        /* Estilo do Popup */
-        .popup-content { text-align: center; }
+        /* Popups */
+        .popup-content { text-align: center; font-size: 1.1em; }
         .popup-btn {
-            background: #27ae60; color: white; border: none; padding: 5px 10px;
-            border-radius: 5px; cursor: pointer; margin-top: 5px;
+            background: #27ae60; color: white; border: none; padding: 8px 15px;
+            border-radius: 5px; cursor: pointer; margin-top: 8px; font-size: 1em; width: 100%;
         }
         .popup-btn.undo { background: #c0392b; }
+        
+        /* Ajuste da barra de busca no celular */
+        .leaflet-control-geosearch form { background: white; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <!-- TELA DE ABERTURA -->
     <div id="intro-screen">
         <h1>Aò, Amore!</h1>
-        <p>Visto che te piace girà pe' Roma, mo' te tocca la missione definitiva.</p>
-        <p><strong>Daje de acqua!</strong> Trovamo tutti i nasoni.</p>
-        <button class="btn" onclick="startApp()">Annamo a beve!</button>
+        <p>Er programma è semplice: te porto in giro e tu bevi.</p>
+        <p><strong>Obiettivo:</strong> Trovà i nasoni de Roma.</p>
+        <button class="btn" onclick="startApp()">Annamo!</button>
     </div>
 
-    <!-- MAPA -->
+    <div id="counter-box">🏆 Bevuti: <span id="count">0</span></div>
     <div id="map"></div>
 
-    <!-- Scripts do Mapa -->
+    <!-- Bibliotecas JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.umd.js"></script>
     
-    <script>
-        // --- 1. CONFIGURAÇÃO DOS DADOS ---
-        // Aqui você colocará a lista real dos nasoni.
-        // Vou colocar 3 exemplos reais perto do Coliseu/Centro.
-        const nasoniData = [
-            { id: 1, lat: 41.8902, lng: 12.4922, name: "Nasone der Colosseo" },
-            { id: 2, lat: 41.8986, lng: 12.4768, name: "Pantheon - L'acqua bona" },
-            { id: 3, lat: 41.9009, lng: 12.4833, name: "Fontana di Trevi (Angolino)" }
-        ];
+    <!-- SEU ARQUIVO DE DADOS (IMPORTANTE: O arquivo nasoni.js deve estar na mesma pasta) -->
+    <script src="nasoni.js"></script> 
 
+    <script>
         let map;
-        const savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
+        let markersCluster;
+        // Recupera o progresso salvo
+        let savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
 
         function startApp() {
             document.getElementById('intro-screen').style.display = 'none';
-            document.getElementById('map').style.display = 'block';
+            document.getElementById('counter-box').style.display = 'block';
+            updateCounter();
             initMap();
         }
 
         function initMap() {
-            // Centraliza em Roma
-            map = L.map('map').setView([41.8902, 12.4922], 14);
+            // Inicia o mapa centrado em Roma
+            map = L.map('map').setView([41.8902, 12.4922], 13);
 
-            // Adiciona o desenho do mapa (OpenStreetMap)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+                attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // Adiciona os marcadores
-            nasoniData.forEach(nasone => {
-                createMarker(nasone);
+            // --- 1. ADICIONAR BUSCA (GeoSearch) ---
+            const provider = new GeoSearch.OpenStreetMapProvider();
+            const searchControl = new GeoSearch.GeoSearchControl({
+                provider: provider,
+                style: 'bar',
+                searchLabel: 'Andò stai? (Cerca indirizzo)',
+                notFoundMessage: 'Nun lo trovo...',
+            });
+            map.addControl(searchControl);
+
+            // --- 2. ADICIONAR OS NASONI DO ARQUIVO ---
+            // Usamos um "Cluster" para agrupar os pontos quando o mapa está longe
+            markersCluster = L.markerClusterGroup();
+
+            // Verifica se o arquivo nasoni.js carregou corretamente
+            if (typeof nasoniRaw !== 'undefined' && nasoniRaw.features) {
+                
+                nasoniRaw.features.forEach(feature => {
+                    const lat = feature.geometry.coordinates[1];
+                    const lng = feature.geometry.coordinates[0];
+                    // O ID do nasone vem do OpenStreetMap
+                    const id = feature.id || (lat + "_" + lng); 
+
+                    // Cria o ícone (diferente se já foi bebido)
+                    const isDone = savedNasoni.includes(id);
+                    const marker = L.marker([lat, lng]);
+
+                    // Adiciona o Popup com lógica de clique
+                    bindPopupLogic(marker, id);
+                    
+                    // Se já foi feito, podemos mudar a opacidade ou ícone (opcional)
+                    if(isDone) marker.setOpacity(0.6);
+
+                    markersCluster.addLayer(marker);
+                });
+
+                map.addLayer(markersCluster);
+            } else {
+                alert("Aò! Nun trovo il file nasoni.js! Controlla su GitHub.");
+            }
+        }
+
+        function bindPopupLogic(marker, id) {
+            marker.bindPopup(() => {
+                const isDone = savedNasoni.includes(id);
+                const btnText = isDone ? "M'ero sbajato" : "Fatta! Ho bevuto!";
+                const btnClass = isDone ? "undo" : "do";
+                const statusText = isDone ? "✅ Già fatto!" : "💧 Daje, bevi!";
+                
+                // Cria o elemento HTML do botão dinamicamente
+                const div = document.createElement('div');
+                div.className = 'popup-content';
+                div.innerHTML = `
+                    <b>Nasone Romano</b><br>
+                    <small>${statusText}</small><br>
+                `;
+                
+                const btn = document.createElement('button');
+                btn.className = `popup-btn ${btnClass}`;
+                btn.innerText = btnText;
+                btn.onclick = () => toggleNasone(id, marker);
+                
+                div.appendChild(btn);
+                return div;
             });
         }
 
-        function createMarker(nasone) {
-            // Verifica se já foi bebido
-            const isDone = savedNasoni.includes(nasone.id);
-            
-            // Define a cor do ícone (Azul = novo, Verde = feito)
-            // Nota: Leaflet padrão é azul. Para personalizar cor fácil, usamos filtros CSS ou imagens customizadas.
-            // Aqui vou usar o padrão, mas mudar o texto do popup.
-
-            const marker = L.marker([nasone.lat, nasone.lng]).addTo(map);
-            
-            updatePopup(marker, nasone, isDone);
-        }
-
-        function updatePopup(marker, nasone, isDone) {
-            let btnText = isDone ? "M'ero sbajato (Desmarcar)" : "Fatta! Ho bevuto!";
-            let btnClass = isDone ? "undo" : "do";
-            let statusText = isDone ? "✅ Già bevuto!" : "💧 Daje, bevi!";
-
-            const content = `
-                <div class="popup-content">
-                    <b>${nasone.name}</b><br>
-                    <small>${statusText}</small><br>
-                    <button class="popup-btn ${btnClass}" onclick="toggleNasone(${nasone.id})">
-                        ${btnText}
-                    </button>
-                </div>
-            `;
-            marker.bindPopup(content);
-        }
-
-        // Função Global para salvar o clique
-        window.toggleNasone = function(id) {
+        function toggleNasone(id, marker) {
             const index = savedNasoni.indexOf(id);
             
             if (index > -1) {
-                // Se já existe, remove (desmarcar)
-                savedNasoni.splice(index, 1);
+                savedNasoni.splice(index, 1); // Remove
             } else {
-                // Se não existe, adiciona (marcar)
-                savedNasoni.push(id);
+                savedNasoni.push(id); // Adiciona
             }
 
-            // Salva no navegador
             localStorage.setItem('nasoniCompleted', JSON.stringify(savedNasoni));
-
-            // Recarrega o mapa para atualizar os status (solução simples)
-            map.closePopup();
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker) {
-                    map.removeLayer(layer);
-                }
-            });
-            nasoniData.forEach(n => createMarker(n));
-            alert(index > -1 ? "Vabbè, sarà pe' la prossima!" : "Daje! Un altro fatto!");
+            
+            updateCounter();
+            marker.closePopup(); // Fecha para atualizar
+            
+            // Reabre o popup instantaneamente com o novo status
+            setTimeout(() => marker.openPopup(), 100); 
         }
 
+        function updateCounter() {
+            document.getElementById('count').innerText = savedNasoni.length;
+        }
     </script>
 </body>
 </html>
