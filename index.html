@@ -7,10 +7,8 @@
     
     <!-- Mapa (Leaflet) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Agrupamento de Marcadores (MarkerCluster) - Para não travar com 2000 pontos -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-    <!-- Busca (Leaflet Geosearch) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.css" />
     
     <!-- Fontes -->
@@ -19,7 +17,6 @@
     <style>
         body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; background-color: #f4f4f4; }
         
-        /* Intro Screen */
         #intro-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #A30000; color: white; display: flex; flex-direction: column;
@@ -35,10 +32,8 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
 
-        /* Mapa e Controles */
         #map { height: 100vh; width: 100%; }
         
-        /* Barra de progresso flutuante */
         #counter-box {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: white; padding: 10px 20px; border-radius: 30px;
@@ -46,15 +41,12 @@
             font-weight: bold; color: #A30000; display: none; white-space: nowrap;
         }
 
-        /* Popups */
         .popup-content { text-align: center; font-size: 1.1em; }
         .popup-btn {
             background: #27ae60; color: white; border: none; padding: 8px 15px;
             border-radius: 5px; cursor: pointer; margin-top: 8px; font-size: 1em; width: 100%;
         }
         .popup-btn.undo { background: #c0392b; }
-        
-        /* Ajuste da barra de busca no celular */
         .leaflet-control-geosearch form { background: white; border-radius: 4px; }
     </style>
 </head>
@@ -65,23 +57,19 @@
         <p>Er programma è semplice: te porto in giro e tu bevi.</p>
         <p><strong>Obiettivo:</strong> Trovà i nasoni de Roma.</p>
         <button class="btn" onclick="startApp()">Annamo!</button>
+        <p style="font-size: 0.8em; margin-top: 20px;" id="loading-msg"></p>
     </div>
 
     <div id="counter-box">🏆 Bevuti: <span id="count">0</span></div>
     <div id="map"></div>
 
-    <!-- Bibliotecas JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <script src="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.umd.js"></script>
-    
-    <!-- SEU ARQUIVO DE DADOS (IMPORTANTE: O arquivo nasoni.js deve estar na mesma pasta) -->
-    <script src="nasoni.js"></script> 
 
     <script>
         let map;
         let markersCluster;
-        // Recupera o progresso salvo
         let savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
 
         function startApp() {
@@ -92,14 +80,12 @@
         }
 
         function initMap() {
-            // Inicia o mapa centrado em Roma
             map = L.map('map').setView([41.8902, 12.4922], 13);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // --- 1. ADICIONAR BUSCA (GeoSearch) ---
             const provider = new GeoSearch.OpenStreetMapProvider();
             const searchControl = new GeoSearch.GeoSearchControl({
                 provider: provider,
@@ -109,36 +95,42 @@
             });
             map.addControl(searchControl);
 
-            // --- 2. ADICIONAR OS NASONI DO ARQUIVO ---
-            // Usamos um "Cluster" para agrupar os pontos quando o mapa está longe
             markersCluster = L.markerClusterGroup();
+            
+            loadNasoniData();
+        }
 
-            // Verifica se o arquivo nasoni.js carregou corretamente
-            if (typeof nasoniRaw !== 'undefined' && nasoniRaw.features) {
-                
-                nasoniRaw.features.forEach(feature => {
-                    const lat = feature.geometry.coordinates[1];
-                    const lng = feature.geometry.coordinates[0];
-                    // O ID do nasone vem do OpenStreetMap
-                    const id = feature.id || (lat + "_" + lng); 
-
-                    // Cria o ícone (diferente se já foi bebido)
-                    const isDone = savedNasoni.includes(id);
-                    const marker = L.marker([lat, lng]);
-
-                    // Adiciona o Popup com lógica de clique
-                    bindPopupLogic(marker, id);
-                    
-                    // Se já foi feito, podemos mudar a opacidade ou ícone (opcional)
-                    if(isDone) marker.setOpacity(0.6);
-
-                    markersCluster.addLayer(marker);
+        // --- NOVA FUNÇÃO DE CARREGAMENTO ---
+        function loadNasoniData() {
+            // Tenta carregar o arquivo nasoni.json
+            fetch('nasoni.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Erro de conexão: " + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Se deu certo, processa os dados
+                    if (data && data.features) {
+                        data.features.forEach(feature => {
+                            const lat = feature.geometry.coordinates[1];
+                            const lng = feature.geometry.coordinates[0];
+                            const id = feature.id || (lat + "_" + lng); 
+                            const isDone = savedNasoni.includes(id);
+                            
+                            const marker = L.marker([lat, lng]);
+                            bindPopupLogic(marker, id);
+                            if(isDone) marker.setOpacity(0.6);
+                            markersCluster.addLayer(marker);
+                        });
+                        map.addLayer(markersCluster);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    alert("Aò! C'è un problema co' sto file nasoni.json. Controlla se l'hai caricato bene su GitHub! (" + error.message + ")");
                 });
-
-                map.addLayer(markersCluster);
-            } else {
-                alert("Aò! Nun trovo il file nasoni.js! Controlla su GitHub.");
-            }
         }
 
         function bindPopupLogic(marker, id) {
@@ -148,13 +140,9 @@
                 const btnClass = isDone ? "undo" : "do";
                 const statusText = isDone ? "✅ Già fatto!" : "💧 Daje, bevi!";
                 
-                // Cria o elemento HTML do botão dinamicamente
                 const div = document.createElement('div');
                 div.className = 'popup-content';
-                div.innerHTML = `
-                    <b>Nasone Romano</b><br>
-                    <small>${statusText}</small><br>
-                `;
+                div.innerHTML = `<b>Nasone Romano</b><br><small>${statusText}</small><br>`;
                 
                 const btn = document.createElement('button');
                 btn.className = `popup-btn ${btnClass}`;
@@ -168,19 +156,14 @@
 
         function toggleNasone(id, marker) {
             const index = savedNasoni.indexOf(id);
-            
             if (index > -1) {
-                savedNasoni.splice(index, 1); // Remove
+                savedNasoni.splice(index, 1);
             } else {
-                savedNasoni.push(id); // Adiciona
+                savedNasoni.push(id);
             }
-
             localStorage.setItem('nasoniCompleted', JSON.stringify(savedNasoni));
-            
             updateCounter();
-            marker.closePopup(); // Fecha para atualizar
-            
-            // Reabre o popup instantaneamente com o novo status
+            marker.closePopup();
             setTimeout(() => marker.openPopup(), 100); 
         }
 
