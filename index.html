@@ -3,15 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Nasoni Quest!</title>
+    <title>Er Giro dei Nasoni</title>
     
-    <!-- MAPA BÁSICO (Leaflet) -->
+    <!-- 1. Estilos do Mapa e da Busca -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- BARRA DE PESQUISA (GeoSearch) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.css" />
-    
-    <!-- Fontes -->
     <link href="https://fonts.googleapis.com/css2?family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
@@ -28,70 +24,82 @@
         .btn {
             background: #F1C40F; color: #A30000; padding: 15px 40px;
             border: none; border-radius: 50px; font-size: 1.5em; font-weight: bold;
-            cursor: pointer; margin-top: 30px; text-transform: uppercase;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            cursor: pointer; margin-top: 20px; text-transform: uppercase;
         }
 
         #map { height: 100vh; width: 100%; }
         
-        /* Contador no rodapé */
         #counter-box {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
             background: white; padding: 10px 25px; border-radius: 50px;
             border: 3px solid #F1C40F; z-index: 1000; font-weight: bold; color: #A30000; display: none;
-            white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            white-space: nowrap;
         }
 
         .popup-content { text-align: center; font-size: 1.1em; min-width: 150px; }
         .popup-btn { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; margin-top: 10px; width: 100%; font-weight: bold; }
         .popup-btn.undo { background: #c0392b; }
         
-        /* Ajuste visual da barra de pesquisa */
+        /* Ajuste da barra de pesquisa para celular */
         .leaflet-control-geosearch form {
             background: white;
             border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: 2px solid #A30000;
             width: 100%;
-        }
-        .leaflet-control-geosearch input {
-            color: #333;
-            font-family: 'Roboto', sans-serif;
         }
     </style>
 </head>
 <body>
 
     <div id="intro-screen">
-        <h1>Aò, Amorzinho!</h1>
+        <h1>Aò, Amore!</h1>
         <p>Trovamo 'sti nasoni!</p>
-        <p id="debug-msg" style="color: yellow; font-size: 0.8em; margin-top: 20px;">Caricamento...</p>
+        
+        <!-- Mensagem de Status -->
+        <p id="status-msg" style="margin-top: 20px; font-size: 0.9em; color: #FFD700;">
+            Caricamento...
+        </p>
+        
         <button id="start-btn" class="btn" onclick="startApp()" style="display:none">Annamo!</button>
     </div>
 
     <div id="counter-box">🏆 Fatti: <span id="count">0</span></div>
     <div id="map"></div>
 
-    <!-- Scripts do Mapa -->
+    <!-- 2. Scripts (A ordem importa!) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Script da Pesquisa -->
     <script src="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.umd.js"></script>
     
-    <!-- SEU ARQUIVO DE DADOS -->
-    <script src="dati.js"></script>
+    <!-- 3. Carrega seus dados -->
+    <script src="dati.js" onerror="fileError()"></script>
 
     <script>
         let map;
         let savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
 
+        // Função caso o arquivo dati.js falhe
+        function fileError() {
+            document.getElementById('status-msg').innerHTML = "❌ ERRORE: Il file <b>dati.js</b> non si carica.<br>Controlla su GitHub!";
+            document.getElementById('status-msg').style.color = "white";
+        }
+
         window.onload = function() {
-            const msg = document.getElementById('debug-msg');
+            const msg = document.getElementById('status-msg');
             
+            // Verifica se a biblioteca de busca carregou
+            if (typeof GeoSearch === 'undefined') {
+                msg.innerHTML = "⚠️ Errore: La ricerca non funziona (Internet lento?). Ricarica la pagina.";
+                return;
+            }
+
+            // Verifica se os dados existem
             if (typeof nasoni === 'undefined') {
-                msg.innerHTML = "❌ ERRORE: File dati.js non trovato.";
-                msg.style.color = "white";
+                msg.innerHTML = "⚠️ ERRORE: Variabile 'nasoni' non trovata.<br>Apri <b>dati.js</b> e scrivi <code>var nasoni = ...</code>";
             } else {
                 msg.innerHTML = "✅ Daje! " + nasoni.features.length + " nasoni pronti.";
                 document.getElementById('start-btn').style.display = 'block';
+                
+                // Carrega o mapa escondido
                 initMap();
             }
         };
@@ -101,76 +109,78 @@
             setTimeout(() => { 
                 document.getElementById('intro-screen').style.display = 'none'; 
                 document.getElementById('counter-box').style.display = 'block';
-                map.invalidateSize();
+                map.invalidateSize(); // Recalcula o tamanho do mapa
             }, 500);
             updateCounter();
         }
 
         function initMap() {
-            // Inicia o mapa
             map = L.map('map').setView([41.8902, 12.4922], 13);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap'
             }).addTo(map);
 
-            // --- AQUI ESTÁ A PESQUISA ---
-            const provider = new GeoSearch.OpenStreetMapProvider();
-            const searchControl = new GeoSearch.GeoSearchControl({
-                provider: provider,
-                style: 'bar', // Estilo barra
-                searchLabel: 'Andò stai? (Cerca via...)', // Texto em Romanesco
-                notFoundMessage: 'Nun lo trovo...',
-                showMarker: true, // Mostra um pino onde buscou
-                showPopup: true,
-                autoClose: true,
-                keepResult: true
-            });
-            map.addControl(searchControl);
-            // -----------------------------
+            // --- ADICIONA BARRA DE BUSCA ---
+            try {
+                const provider = new GeoSearch.OpenStreetMapProvider();
+                const searchControl = new GeoSearch.GeoSearchControl({
+                    provider: provider,
+                    style: 'bar',
+                    searchLabel: 'Andò stai? (Cerca via...)',
+                    notFoundMessage: 'Nun lo trovo...',
+                    showMarker: true,
+                    retainZoomLevel: false,
+                    animateZoom: true,
+                    autoClose: true,
+                    keepResult: true
+                });
+                map.addControl(searchControl);
+            } catch (e) {
+                console.log("Erro na busca: " + e);
+            }
 
-            // Adiciona os pontos Vermelhos/Verdes
+            // --- ADICIONA OS PONTOS (SEM CLUSTER PARA GARANTIR) ---
             let bounds = []; 
 
-            if(nasoni && nasoni.features) {
-                nasoni.features.forEach(feature => {
-                    if (feature.geometry && feature.geometry.coordinates) {
-                        const lng = feature.geometry.coordinates[0];
-                        const lat = feature.geometry.coordinates[1];
-                        const id = feature.id || (lat + "_" + lng);
-                        
-                        const isDone = savedNasoni.includes(id);
+            nasoni.features.forEach(feature => {
+                if (feature.geometry && feature.geometry.coordinates) {
+                    const lng = feature.geometry.coordinates[0];
+                    const lat = feature.geometry.coordinates[1];
+                    const id = feature.id || (lat + "_" + lng);
+                    
+                    const isDone = savedNasoni.includes(id);
 
-                        // Bolinha
-                        const circle = L.circleMarker([lat, lng], {
-                            radius: 6,
-                            fillColor: isDone ? "#2ecc71" : "#e74c3c", // Verde / Vermelho
-                            color: "#fff",
-                            weight: 1,
-                            opacity: 1,
-                            fillOpacity: 0.8
-                        }).addTo(map);
+                    // Desenha a bolinha
+                    const circle = L.circleMarker([lat, lng], {
+                        radius: 6,
+                        fillColor: isDone ? "#2ecc71" : "#e74c3c", // Verde ou Vermelho
+                        color: "#fff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
 
-                        bounds.push([lat, lng]);
+                    bounds.push([lat, lng]);
 
-                        // Popup
-                        const div = document.createElement('div');
-                        div.className = 'popup-content';
-                        div.innerHTML = `<b>Nasone</b><br><small>${isDone ? "✅ Fatta!" : "💧 Daje!"}</small><br>`;
-                        const btn = document.createElement('button');
-                        btn.className = `popup-btn ${isDone ? 'undo' : 'do'}`;
-                        btn.innerText = isDone ? "Annulla" : "Bevuto!";
-                        btn.onclick = () => toggleNasone(id, circle);
-                        div.appendChild(btn);
-                        
-                        circle.bindPopup(div);
-                    }
-                });
-
-                // Centraliza
-                if (bounds.length > 0) {
-                    map.fitBounds(bounds);
+                    // Popup
+                    const div = document.createElement('div');
+                    div.className = 'popup-content';
+                    div.innerHTML = `<b>Nasone</b><br><small>${isDone ? "✅ Fatta!" : "💧 Daje!"}</small><br>`;
+                    const btn = document.createElement('button');
+                    btn.className = `popup-btn ${isDone ? 'undo' : 'do'}`;
+                    btn.innerText = isDone ? "Annulla" : "Bevuto!";
+                    btn.onclick = () => toggleNasone(id, circle);
+                    div.appendChild(btn);
+                    
+                    circle.bindPopup(div);
                 }
+            });
+            
+            // Centraliza
+            if(bounds.length > 0) {
+                // Zoom inicial em Roma (manual para garantir performance)
+                // map.fitBounds(bounds); 
             }
         }
 
@@ -178,3 +188,23 @@
             const index = savedNasoni.indexOf(id);
             
             if (index > -1) {
+                savedNasoni.splice(index, 1);
+                marker.setStyle({ fillColor: "#e74c3c" }); // Volta pra vermelho
+                marker.closePopup();
+            } else {
+                savedNasoni.push(id);
+                marker.setStyle({ fillColor: "#2ecc71" }); // Vira verde
+                marker.closePopup();
+            }
+            localStorage.setItem('nasoniCompleted', JSON.stringify(savedNasoni));
+            updateCounter();
+            
+            setTimeout(() => marker.openPopup(), 100);
+        }
+
+        function updateCounter() {
+            document.getElementById('count').innerText = savedNasoni.length;
+        }
+    </script>
+</body>
+</html>
