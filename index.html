@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Er Giro dei Nasoni</title>
     
-    <!-- Map Styles -->
+    <!-- APENAS O MAPA BÁSICO (Sem plugins extras que podem quebrar) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.css" />
     <link href="https://fonts.googleapis.com/css2?family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
@@ -22,58 +19,63 @@
             text-align: center; padding: 20px; box-sizing: border-box;
             transition: opacity 0.5s;
         }
-        h1 { font-family: 'Lobster', cursive; font-size: 3.5em; margin-bottom: 10px; }
-        p { font-size: 1.2em; max-width: 600px; }
+        h1 { font-family: 'Lobster', cursive; font-size: 3em; margin-bottom: 10px; }
         .btn {
             background: #F1C40F; color: #A30000; padding: 15px 40px;
             border: none; border-radius: 50px; font-size: 1.5em; font-weight: bold;
             cursor: pointer; margin-top: 30px; text-transform: uppercase;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
         #map { height: 100vh; width: 100%; }
-        #counter-box { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 25px; border-radius: 50px; border: 2px solid #F1C40F; z-index: 1000; font-weight: bold; color: #A30000; display: none; }
         
+        #counter-box {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 10px 25px; border-radius: 50px;
+            border: 3px solid #F1C40F; z-index: 1000; font-weight: bold; color: #A30000; display: none;
+        }
+
         .popup-content { text-align: center; font-size: 1.1em; min-width: 150px; }
         .popup-btn { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; margin-top: 10px; width: 100%; font-weight: bold; }
         .popup-btn.undo { background: #c0392b; }
-        
-        /* Estilo da busca */
-        .leaflet-control-geosearch form { background: white; border-radius: 8px; }
     </style>
 </head>
 <body>
 
     <div id="intro-screen">
         <h1>Aò, Amore!</h1>
-        <p>Visto che te piace girà pe' Roma...</p>
-        <p id="loading-text" style="font-size: 0.9em; margin-top: 20px; color: #FFD700;">Caricamento mappa...</p>
+        <p>Trovamo 'sti nasoni!</p>
+        <p id="debug-msg" style="color: yellow; font-size: 0.8em; margin-top: 20px;">Caricamento...</p>
         <button id="start-btn" class="btn" onclick="startApp()" style="display:none">Annamo!</button>
     </div>
 
     <div id="counter-box">🏆 Fatti: <span id="count">0</span></div>
     <div id="map"></div>
 
+    <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-    <script src="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.umd.js"></script>
     
-    <!-- Carrega DADOS -->
+    <!-- SEU ARQUIVO DE DADOS -->
     <script src="dati.js"></script>
 
     <script>
         let map;
-        let markersCluster;
         let savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
 
+        // Diagnóstico inicial
         window.onload = function() {
-            // Verificação de segurança
-            if (typeof nasoni !== 'undefined' && nasoni.features) {
-                document.getElementById('loading-text').innerText = "✅ Trovati " + nasoni.features.length + " nasoni!";
-                document.getElementById('start-btn').style.display = 'block';
-                initMap();
+            const msg = document.getElementById('debug-msg');
+            
+            if (typeof nasoni === 'undefined') {
+                msg.innerHTML = "❌ ERRORE GRAVE: File dati.js non trovato. Controlla GitHub.";
+                msg.style.color = "white";
+            } else if (!nasoni.features || nasoni.features.length === 0) {
+                msg.innerHTML = "⚠️ ERRORE: La lista dei nasoni è vuota!";
             } else {
-                document.getElementById('loading-text').innerHTML = "⚠️ Errore: File dati.js non letto correttamente.";
+                msg.innerHTML = "✅ OK! Ho trovato " + nasoni.features.length + " punti.";
+                document.getElementById('start-btn').style.display = 'block';
+                
+                // Inicia o mapa oculto para já ir carregando
+                initMap();
             }
         };
 
@@ -82,71 +84,61 @@
             setTimeout(() => { 
                 document.getElementById('intro-screen').style.display = 'none'; 
                 document.getElementById('counter-box').style.display = 'block';
+                // Atualiza o tamanho do mapa
+                map.invalidateSize();
             }, 500);
             updateCounter();
         }
 
         function initMap() {
+            // Centraliza em Roma
             map = L.map('map').setView([41.8902, 12.4922], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(map);
 
-            const provider = new GeoSearch.OpenStreetMapProvider();
-            const searchControl = new GeoSearch.GeoSearchControl({ provider: provider, style: 'bar', searchLabel: 'Cerca...', });
-            map.addControl(searchControl);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
 
-            markersCluster = L.markerClusterGroup({ showCoverageOnHover: false });
-
-            let points = [];
+            // === AQUI ESTÁ A MUDANÇA: Sem clusters, direto no mapa ===
+            let bounds = []; // Para ajustar o zoom depois
 
             nasoni.features.forEach(feature => {
                 if (feature.geometry && feature.geometry.coordinates) {
-                    // Atenção aqui: GeoJSON é [Longitude, Latitude], Leaflet quer [Lat, Long]
+                    // Coordenadas do GeoJSON (Longitude, Latitude)
                     const lng = feature.geometry.coordinates[0];
                     const lat = feature.geometry.coordinates[1];
-                    const id = feature.id || (lat + "_" + lng); 
+                    const id = feature.id || (lat + "_" + lng);
                     
                     const isDone = savedNasoni.includes(id);
 
-                    // MUDANÇA: Usar CircleMarker em vez de Marker (não precisa de imagem png)
-                    const markerOptions = {
-                        radius: 8,              // Tamanho da bolinha
-                        fillColor: isDone ? "#27ae60" : "#3498db", // Verde se feito, Azul se não
-                        color: "#fff",          // Borda branca
+                    // Bolinha Vermelha (ou Verde se feito)
+                    const circle = L.circleMarker([lat, lng], {
+                        radius: 6,
+                        fillColor: isDone ? "#2ecc71" : "#e74c3c", // Verde ou Vermelho
+                        color: "#fff",
                         weight: 1,
                         opacity: 1,
                         fillOpacity: 0.8
-                    };
+                    }).addTo(map); // <--- ADICIONA DIRETO AO MAPA
 
-                    const marker = L.circleMarker([lat, lng], markerOptions);
-                    
-                    // Guardamos o ID dentro do marcador para usar depois
-                    marker.nasoneId = id;
+                    bounds.push([lat, lng]);
 
                     // Popup
                     const div = document.createElement('div');
                     div.className = 'popup-content';
-                    div.innerHTML = `<b>Nasone</b><br><small>${isDone ? "✅ Già fatto!" : "💧 Daje!"}</small><br>`;
-                    
+                    div.innerHTML = `<b>Nasone</b><br><small>${isDone ? "✅ Fatta!" : "💧 Daje!"}</small><br>`;
                     const btn = document.createElement('button');
                     btn.className = `popup-btn ${isDone ? 'undo' : 'do'}`;
                     btn.innerText = isDone ? "Annulla" : "Bevuto!";
-                    
-                    // Importante: Passamos o próprio marcador para a função
-                    btn.onclick = () => toggleNasone(id, marker);
-                    
+                    btn.onclick = () => toggleNasone(id, circle);
                     div.appendChild(btn);
-                    marker.bindPopup(div);
-
-                    markersCluster.addLayer(marker);
-                    points.push([lat, lng]);
+                    
+                    circle.bindPopup(div);
                 }
             });
 
-            map.addLayer(markersCluster);
-            
-            // Força o mapa a focar onde estão os pontos
-            if (points.length > 0) {
-                map.fitBounds(L.latLngBounds(points));
+            // Força o mapa a olhar para os pontos
+            if (bounds.length > 0) {
+                map.fitBounds(bounds);
             }
         }
 
@@ -154,36 +146,19 @@
             const index = savedNasoni.indexOf(id);
             
             if (index > -1) {
-                // Desmarcar
                 savedNasoni.splice(index, 1);
-                // Volta a ser azul
-                marker.setStyle({ fillColor: "#3498db" });
+                marker.setStyle({ fillColor: "#e74c3c" }); // Volta pra vermelho
                 marker.closePopup();
             } else {
-                // Marcar
                 savedNasoni.push(id);
-                // Vira verde
-                marker.setStyle({ fillColor: "#27ae60" });
+                marker.setStyle({ fillColor: "#2ecc71" }); // Vira verde
                 marker.closePopup();
             }
-            
             localStorage.setItem('nasoniCompleted', JSON.stringify(savedNasoni));
             updateCounter();
             
-            // Reabre o popup para atualizar o texto (gambiarra visual rápida)
-            setTimeout(() => {
-                const isDone = savedNasoni.includes(id);
-                const newDiv = document.createElement('div');
-                newDiv.className = 'popup-content';
-                newDiv.innerHTML = `<b>Nasone</b><br><small>${isDone ? "✅ Già fatto!" : "💧 Daje!"}</small><br>`;
-                const newBtn = document.createElement('button');
-                newBtn.className = `popup-btn ${isDone ? 'undo' : 'do'}`;
-                newBtn.innerText = isDone ? "Annulla" : "Bevuto!";
-                newBtn.onclick = () => toggleNasone(id, marker);
-                newDiv.appendChild(newBtn);
-                
-                marker.bindPopup(newDiv).openPopup();
-            }, 100);
+            // Reabre popup atualizado
+            setTimeout(() => marker.openPopup(), 100);
         }
 
         function updateCounter() {
