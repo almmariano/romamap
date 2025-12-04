@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Er Giro dei Nasoni</title>
     
-    <!-- Bibliotecas do Mapa (Leaflet) -->
+    <!-- Leaflet (Mapa) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.css" />
     
-    <!-- Fontes e Ícones -->
+    <!-- Fonte Romana -->
     <link href="https://fonts.googleapis.com/css2?family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
@@ -20,13 +20,11 @@
         /* Tela de Introdução */
         #intro-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #A30000; /* Rosso Roma */
-            color: white; display: flex; flex-direction: column;
+            background: #A30000; color: white; display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 9999;
             text-align: center; padding: 20px; box-sizing: border-box;
-            transition: opacity 0.5s ease;
         }
-        h1 { font-family: 'Lobster', cursive; font-size: 3em; margin-bottom: 10px; }
+        h1 { font-family: 'Lobster', cursive; font-size: 3.5em; margin-bottom: 10px; }
         p { font-size: 1.2em; max-width: 600px; line-height: 1.5; }
         .btn {
             background: #F1C40F; color: #A30000; padding: 15px 40px;
@@ -34,12 +32,11 @@
             cursor: pointer; margin-top: 30px; text-transform: uppercase;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        .btn:disabled { background: #ccc; cursor: not-allowed; color: #666; }
 
         /* Mapa */
         #map { height: 100vh; width: 100%; }
         
-        /* Contador Flutuante */
+        /* Contador */
         #counter-box {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
             background: white; padding: 10px 25px; border-radius: 50px;
@@ -56,185 +53,140 @@
         }
         .popup-btn.undo { background: #c0392b; }
         
-        /* Loading spinner */
-        .loader {
-            border: 5px solid #f3f3f3; border-top: 5px solid #F1C40F;
-            border-radius: 50%; width: 40px; height: 40px;
-            animation: spin 1s linear infinite; margin-top: 20px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* Ajustes Mobile */
         .leaflet-control-geosearch form { background: white; border-radius: 8px;  }
     </style>
 </head>
 <body>
 
-    <!-- TELA DE ABERTURA -->
     <div id="intro-screen">
         <h1>Aò, Amore!</h1>
-        <p>Visto che te piace girà pe' Roma, ho pensato de farti 'no regalo utile.</p>
-        <p>La missione è semplice: <strong>Trovamo tutti i nasoni de Roma!</strong></p>
-        
-        <!-- Loading Animation -->
-        <div id="loader-container">
-            <div class="loader"></div>
-            <p style="font-size: 0.9em; margin-top: 10px;">Sto a caricà la mappa...</p>
-        </div>
-
-        <button id="start-btn" class="btn" onclick="startApp()" style="display:none;">Annamo a beve!</button>
+        <p>Visto che te piace girà pe' Roma, mo' te tocca la missione definitiva.</p>
+        <p><strong>Obiettivo:</strong> Trovà tutti i nasoni de Roma!</p>
+        <button class="btn" onclick="startApp()">Annamo a beve!</button>
     </div>
 
-    <!-- INTERFACE PRINCIPAL -->
     <div id="counter-box">🏆 Bevuti: <span id="count">0</span></div>
     <div id="map"></div>
 
-    <!-- SCRIPTS -->
+    <!-- Bibliotecas -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <script src="https://unpkg.com/leaflet-geosearch@3.0.0/dist/geosearch.umd.js"></script>
 
+    <!-- CARREGA O SEU ARQUIVO DE DADOS AQUI -->
+    <script src="dati.js"></script>
+
     <script>
         let map;
         let markersCluster;
-        // Recupera dados salvos ou cria lista vazia
         let savedNasoni = JSON.parse(localStorage.getItem('nasoniCompleted')) || [];
 
-        // 1. Assim que a página abre, carregamos o mapa
-        document.addEventListener("DOMContentLoaded", function() {
+        function startApp() {
+            document.getElementById('intro-screen').style.display = 'none';
+            document.getElementById('counter-box').style.display = 'block';
+            updateCounter();
             initMap();
-            loadDataFromAPI();
-        });
+        }
 
         function initMap() {
-            map = L.map('map').setView([41.8902, 12.4922], 13); // Centraliza no Coliseu
+            // Centraliza em Roma
+            map = L.map('map').setView([41.8902, 12.4922], 14);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // Barra de Busca
+            // Busca
             const provider = new GeoSearch.OpenStreetMapProvider();
             const searchControl = new GeoSearch.GeoSearchControl({
-                provider: provider,
-                style: 'bar',
-                searchLabel: 'Andò stai? (Cerca via...)',
-                notFoundMessage: 'Nun lo trovo...',
-                showMarker: true,
-                keepResult: true
+                provider: provider, style: 'bar', searchLabel: 'Cerca indirizzo...', notFoundMessage: 'Nun lo trovo...',
             });
             map.addControl(searchControl);
 
-            // Grupo de marcadores (Cluster)
-            markersCluster = L.markerClusterGroup({
-                showCoverageOnHover: false,
-                maxClusterRadius: 50
-            });
-            map.addLayer(markersCluster);
-        }
+            // Cluster (Agrupamento)
+            markersCluster = L.markerClusterGroup({ showCoverageOnHover: false });
 
-        // 2. Função que busca os dados "ao vivo" do OpenStreetMap (Overpass API)
-        function loadDataFromAPI() {
-            // Esta query pede todos os "drinking_water" na área de Roma
-            const query = `
-                [out:json][timeout:25];
-                area["name"="Roma"]->.searchArea;
-                node["amenity"="drinking_water"](area.searchArea);
-                out;
-            `;
-            const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+            // LÓGICA DE CARREGAMENTO DOS DADOS
+            // Verifica se o arquivo dati.js foi carregado corretamente
+            if (typeof nasoniData !== 'undefined' && nasoniData.features) {
+                
+                nasoniData.features.forEach(feature => {
+                    // Verifica se tem coordenadas
+                    if (feature.geometry && feature.geometry.coordinates) {
+                        const lat = feature.geometry.coordinates[1];
+                        const lng = feature.geometry.coordinates[0];
+                        const id = feature.id || (lat + "_" + lng); 
+                        const isDone = savedNasoni.includes(id);
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    // Processa os dados recebidos
-                    if (data.elements) {
-                        data.elements.forEach(element => {
-                            addNasoneToMap(element);
-                        });
+                        const marker = L.marker([lat, lng]);
+                        
+                        // Se já bebeu, deixa transparente
+                        if (isDone) marker.setOpacity(0.5);
+
+                        // Conteúdo do clique
+                        const btnText = isDone ? "M'ero sbajato (Annulla)" : "Fatta! Ho bevuto! 🍺";
+                        const btnClass = isDone ? "undo" : "do";
+                        const statusText = isDone ? "✅ Già fatto!" : "💧 Daje, bevi!";
+
+                        const popupContent = document.createElement('div');
+                        popupContent.className = 'popup-content';
+                        popupContent.innerHTML = `
+                            <b>Nasone Romano</b><br>
+                            <small id="status-${id.replace(/\//g, '-')}">${statusText}</small><br>
+                            <button id="btn-${id.replace(/\//g, '-')}" class="popup-btn ${btnClass}" onclick="toggleNasone('${id}')">
+                                ${btnText}
+                            </button>
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        markersCluster.addLayer(marker);
                     }
-                    // Dados carregados: Esconde loader e mostra botão
-                    document.getElementById('loader-container').style.display = 'none';
-                    document.getElementById('start-btn').style.display = 'block';
-                    
-                    // Atualiza contador inicial
-                    updateCounter();
-                })
-                .catch(error => {
-                    console.error('Erro:', error);
-                    alert("Aò! Nun riesco a trovà l'acqua (Erro de conexão). Riprova più tardi.");
                 });
-        }
-
-        function addNasoneToMap(nasone) {
-            const id = nasone.id;
-            const lat = nasone.lat;
-            const lon = nasone.lon;
-            const isDone = savedNasoni.includes(id);
-
-            const marker = L.marker([lat, lon]);
-            
-            // Se já bebeu, deixa o ícone meio transparente
-            if (isDone) {
-                marker.setOpacity(0.5);
+                map.addLayer(markersCluster);
+                
+            } else {
+                alert("Atenção: O arquivo 'dati.js' não foi encontrado ou está com erro! Verifique no GitHub.");
             }
-
-            // Conteúdo do balãozinho
-            marker.bindPopup(() => createPopupContent(id, marker));
-            
-            markersCluster.addLayer(marker);
         }
 
-        function createPopupContent(id, marker) {
-            const isDone = savedNasoni.includes(id);
-            const btnText = isDone ? "M'ero sbajato (Annulla)" : "Fatta! Ho bevuto! 🍺";
-            const btnClass = isDone ? "undo" : "do";
-            const statusText = isDone ? "✅ Già fatto!" : "💧 Daje, bevi!";
-            
-            const div = document.createElement('div');
-            div.className = 'popup-content';
-            div.innerHTML = `
-                <b>Nasone Romano</b><br>
-                <small>${statusText}</small><br>
-            `;
-            
-            const btn = document.createElement('button');
-            btn.className = `popup-btn ${btnClass}`;
-            btn.innerText = btnText;
-            btn.onclick = () => toggleNasone(id, marker);
-            
-            div.appendChild(btn);
-            return div;
-        }
-
-        function toggleNasone(id, marker) {
+        // Função global para o clique no botão
+        window.toggleNasone = function(id) {
             const index = savedNasoni.indexOf(id);
+            const safeId = id.replace(/\//g, '-'); // Arruma IDs com barras
+            const btn = document.getElementById(`btn-${safeId}`);
+            const status = document.getElementById(`status-${safeId}`);
             
             if (index > -1) {
-                savedNasoni.splice(index, 1); // Remove da lista
-                marker.setOpacity(1.0); // Volta a cor normal
+                // Desmarcar
+                savedNasoni.splice(index, 1);
+                if(btn) {
+                    btn.innerText = "Fatta! Ho bevuto! 🍺";
+                    btn.className = "popup-btn do";
+                    status.innerText = "💧 Daje, bevi!";
+                }
             } else {
-                savedNasoni.push(id); // Adiciona na lista
-                marker.setOpacity(0.5); // Fica transparente
+                // Marcar
+                savedNasoni.push(id);
+                if(btn) {
+                    btn.innerText = "M'ero sbajato (Annulla)";
+                    btn.className = "popup-btn undo";
+                    status.innerText = "✅ Già fatto!";
+                }
             }
 
-            // Salva no celular
+            // Salva e atualiza contador
             localStorage.setItem('nasoniCompleted', JSON.stringify(savedNasoni));
             updateCounter();
-            marker.closePopup();
+            
+            // Fecha o popup depois de um tempinho
+            setTimeout(() => map.closePopup(), 500);
+            
+            // Recarrega o mapa visualmente (opacidade) na próxima vez que mexer, 
+            // para não travar tudo agora recarregando todos os ícones.
         }
 
         function updateCounter() {
             document.getElementById('count').innerText = savedNasoni.length;
-        }
-
-        function startApp() {
-            const intro = document.getElementById('intro-screen');
-            intro.style.opacity = '0';
-            setTimeout(() => {
-                intro.style.display = 'none';
-                document.getElementById('counter-box').style.display = 'block';
-            }, 500);
         }
     </script>
 </body>
