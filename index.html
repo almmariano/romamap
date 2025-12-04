@@ -113,7 +113,7 @@
                     // Bolinha Vermelha (ou Verde se feito)
                     const circle = L.circleMarker([lat, lng], {
                         radius: 6,
-                        fillColor: isDone ? "#2ecc71" : "#e74c3c", // Verde ou Vermelho
+                        fillColor: isDone ? "#27ae60" : "#3498db", // Verde ou Azul
                         color: "#fff",
                         weight: 1,
                         opacity: 1,
@@ -147,7 +147,7 @@
             
             if (index > -1) {
                 savedNasoni.splice(index, 1);
-                marker.setStyle({ fillColor: "#e74c3c" }); // Volta pra vermelho
+                marker.setStyle({ fillColor: "#3498db" });
                 marker.closePopup();
             } else {
                 savedNasoni.push(id);
@@ -167,3 +167,4 @@
     </script>
 </body>
 </html>
+
